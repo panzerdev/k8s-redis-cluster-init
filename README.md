@@ -16,8 +16,8 @@ Commandline arguments at startup with ENV names alternatives in `()`
     	(MY_POD_IP) - IP of this pod
   -port string
     	(PORT) - The Port the redis instance will be started on
-  -sentinelHostPort string
-    	(SENTINEL_HOST_PORT) - Redis used for distributed synclock host:port
+  -syncHelperHostPort string
+    	(SYNC_HELPER_HOST_PORT) - Redis used for distributed synclock host:port
   -sentinelName string
     	(SENTINEL_NAME) - Sentinels service name also used for the Endpoints
   -sentinelPortName string

@@ -16,19 +16,19 @@ import (
 	"time"
 )
 
-var podIp = flag.String("podIp", os.Getenv("MY_POD_IP"), "IP of this pod")
-var nameSpace = flag.String("ns", os.Getenv("NAMESPACE"), "Namespace to operate in")
+var podIp = flag.String("podIp", os.Getenv("MY_POD_IP"), "(MY_POD_IP) - IP of this pod")
+var nameSpace = flag.String("ns", os.Getenv("NAMESPACE"), "(NAMESPACE) - Namespace to operate in")
 
-var port = flag.String("port", os.Getenv("PORT"), "The Port the redis instance will be started on")
+var port = flag.String("port", os.Getenv("PORT"), "(PORT) - The Port the redis instance will be started on")
 
-var syncRedisHostPort = flag.String("sentinelHostPort", os.Getenv("SENTINEL_HOST_PORT"), "Redis used for distributed synclock host:port")
+var syncRedisHostPort = flag.String("syncHelperHostPort", os.Getenv("SYNC_HELPER_HOST_PORT"), "(SYNC_HELPER_HOST_PORT) - Redis used for distributed synclock host:port")
 
-var seName = flag.String("sentinelName", os.Getenv("SENTINEL_NAME"), "Sentinels service name also used for the Endpoints")
-var sePortName = flag.String("sentinelPortName", os.Getenv("SENTINEL_PORT_NAME"), "Sentinels service portname to look for in Endpoints")
-var redisClusterName = flag.String("clusterName", os.Getenv("REDIS_CLUSTER_NAME"), "Name of this Redis cluster")
-var redisMasterQuorum = flag.String("masterQuorum", os.Getenv("REDIS_MASTER_QUORUM"), "Number of Sentinels which have to agree that the master is down")
-var downAfter = flag.String("downAfterMs", os.Getenv("DOWN_AFTER_MS"), "Time in ms after which the master is considered down")
-var confFilePath = flag.String("pathToFile", os.Getenv("PATH_TO_CONFIG_FILE"), "Path to config file")
+var seName = flag.String("sentinelName", os.Getenv("SENTINEL_NAME"), "(SENTINEL_NAME) - Sentinels service name also used for the Endpoints")
+var sePortName = flag.String("sentinelPortName", os.Getenv("SENTINEL_PORT_NAME"), "(SENTINEL_PORT_NAME) - Sentinels service portname to look for in Endpoints")
+var redisClusterName = flag.String("clusterName", os.Getenv("REDIS_CLUSTER_NAME"), "(REDIS_CLUSTER_NAME) - Name of this Redis cluster")
+var redisMasterQuorum = flag.String("masterQuorum", os.Getenv("REDIS_MASTER_QUORUM"), "(REDIS_MASTER_QUORUM) - Number of Sentinels which have to agree that the master is down")
+var downAfter = flag.String("downAfterMs", os.Getenv("DOWN_AFTER_MS"), "(DOWN_AFTER_MS) - Time in ms after which the master is considered down")
+var confFilePath = flag.String("pathToFile", os.Getenv("PATH_TO_CONFIG_FILE"), "(PATH_TO_CONFIG_FILE) - Path to config file")
 
 var redisHelperKey string
 

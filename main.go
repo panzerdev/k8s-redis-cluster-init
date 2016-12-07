@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"gopkg.in/redis.v5"
@@ -13,28 +15,53 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
+const (
+	keyRedisSentinelServiceHost            = "redis.sentinel.service.host.name"
+	keyRedisSentinelServicePort            = "redis.sentinel.service.port.name"
+	keyRedisSentinelClusterName            = "redis.sentinel.cluster.name"
+	keyRedisSentinelClusterQuorum          = "redis.sentinel.cluster.quorum"
+	keyRedisSentinelClusterDownAfterMs     = "redis.sentinel.cluster.down.after.ms"
+	keyRedisSentinelClusterParallelSync    = "redis.sentinel.cluster.parallel.syncs"
+	keyRedisSentinelClusterFailoverTimeout = "redis.sentinel.cluster.failover.timeout"
+)
+
+// Pod values
 var podIp = flag.String("podIp", os.Getenv("MY_POD_IP"), "(MY_POD_IP) - IP of this pod")
 var nameSpace = flag.String("ns", os.Getenv("NAMESPACE"), "(NAMESPACE) - Namespace to operate in")
-
 var port = flag.String("port", os.Getenv("PORT"), "(PORT) - The Port the redis instance will be started on")
 
+// Helper redis for getting a distributed lock
 var syncRedisHostPort = flag.String("syncHelperHostPort", os.Getenv("SYNC_HELPER_HOST_PORT"), "(SYNC_HELPER_HOST_PORT) - Redis used for distributed synclock host:port")
 
+// Sentinel service values
 var seName = flag.String("sentinelName", os.Getenv("SENTINEL_NAME"), "(SENTINEL_NAME) - Sentinels service name also used for the Endpoints")
 var sePortName = flag.String("sentinelPortName", os.Getenv("SENTINEL_PORT_NAME"), "(SENTINEL_PORT_NAME) - Sentinels service portname to look for in Endpoints")
+
+// Sentinel values for configuring the cluster
 var redisClusterName = flag.String("clusterName", os.Getenv("REDIS_CLUSTER_NAME"), "(REDIS_CLUSTER_NAME) - Name of this Redis cluster")
 var redisMasterQuorum = flag.String("masterQuorum", os.Getenv("REDIS_MASTER_QUORUM"), "(REDIS_MASTER_QUORUM) - Number of Sentinels which have to agree that the master is down")
 var downAfter = flag.String("downAfterMs", os.Getenv("DOWN_AFTER_MS"), "(DOWN_AFTER_MS) - Time in ms after which the master is considered down")
+var parallelSync = flag.String("parallelSync", os.Getenv("PARALLEL_SYNC"), "(PARALLEL_SYNC) - Nr of parallel sync of slaves")
+var failoverTimeout = flag.String("failoverTimeout", os.Getenv("FAILOVER_TIMEOUT"), "(FAILOVER_TIMEOUT) - Failover timeout")
+
+// Paths to raw config file and optionally the annotation file containing ALL the config values
 var confFilePath = flag.String("pathToFile", os.Getenv("PATH_TO_CONFIG_FILE"), "(PATH_TO_CONFIG_FILE) - Path to config file")
+var configValuesFile = flag.String("pathToConfigFile", os.Getenv("PATH_TO_CONFIG_VALUE_FILE"), "(PATH_TO_CONFIG_VALUE_FILE) - Path to config values from annotation file")
 
 var redisHelperKey string
 
 func main() {
 	log.Println("Starting up redis watcher")
 	flag.Parse()
+
+	if *configValuesFile != "" {
+		log.Println("Filepath found for config values")
+		getValuesFromFile()
+	}
 	flag.VisitAll(func(f *flag.Flag) {
 		log.Printf("Flag \n Name:\t\t%v \n Value:\t\t%v \n DefaultVal:\t%v \n------------------- \n", f.Name, f.Value, f.DefValue)
 	})
@@ -232,14 +259,14 @@ func main() {
 			}
 			log.Println("Sentiel SET down-after-milliseconds done:", sCmd)
 
-			sCmd = redis.NewStatusCmd("SENTINEL", "SET", *redisClusterName, "parallel-syncs", "1")
+			sCmd = redis.NewStatusCmd("SENTINEL", "SET", *redisClusterName, "parallel-syncs", *parallelSync)
 			seClient.Process(sCmd)
 			if sCmd.Err() != nil {
 				log.Fatalf("SET parallel-syncs went wrong... --- %+v", sCmd)
 			}
 			log.Println("Sentiel SET parallel-syncs done:", sCmd)
 
-			sCmd = redis.NewStatusCmd("SENTINEL", "SET", *redisClusterName, "failover-timeout", "180000")
+			sCmd = redis.NewStatusCmd("SENTINEL", "SET", *redisClusterName, "failover-timeout", *failoverTimeout)
 			seClient.Process(sCmd)
 			if sCmd.Err() != nil {
 				log.Fatalf("SET failover-timeout went wrong... --- %+v", sCmd)
@@ -253,6 +280,46 @@ func main() {
 	}
 	<-doneC
 	log.Println("All good lets go fire up this redis!")
+}
+
+func getValuesFromFile() {
+	content, err := ioutil.ReadFile(*configValuesFile)
+	if err != nil {
+		log.Fatal("File read problem", err)
+	}
+	s := bufio.NewScanner(bytes.NewReader(content))
+	mp := map[string]string{}
+	for s.Scan() {
+		line := s.Text()
+		tmpSlice := strings.SplitN(line, "=", 2)
+		mp[tmpSlice[0]] = strings.Replace(tmpSlice[1], "\"", "", -1)
+	}
+	if err = s.Err(); err != nil {
+		log.Fatal("Scanner error", err)
+	}
+
+	if *seName = mp[keyRedisSentinelServiceHost]; *seName == "" {
+		log.Fatalln("Missing value for", keyRedisSentinelServiceHost)
+	}
+	if *sePortName = mp[keyRedisSentinelServicePort]; *sePortName == "" {
+		log.Fatalln("Missing value for", keyRedisSentinelServicePort)
+	}
+	if *redisClusterName = mp[keyRedisSentinelClusterName]; *redisClusterName == "" {
+		log.Fatalln("Missing value for", keyRedisSentinelClusterName)
+	}
+	if *redisMasterQuorum = mp[keyRedisSentinelClusterQuorum]; *redisMasterQuorum == "" {
+		log.Fatalln("Missing value for", keyRedisSentinelClusterQuorum)
+	}
+	if *downAfter = mp[keyRedisSentinelClusterDownAfterMs]; *downAfter == "" {
+		log.Fatalln("Missing value for", keyRedisSentinelClusterDownAfterMs)
+	}
+	if *parallelSync = mp[keyRedisSentinelClusterParallelSync]; *parallelSync == "" {
+		log.Fatalln("Missing value for", keyRedisSentinelClusterParallelSync)
+	}
+	if *failoverTimeout = mp[keyRedisSentinelClusterFailoverTimeout]; *failoverTimeout == "" {
+		log.Fatalln("Missing value for", keyRedisSentinelClusterFailoverTimeout)
+	}
+	log.Println("Getting values from annotation config file worked out fine...")
 }
 
 func getClient() *kubernetes.Clientset {
@@ -294,6 +361,6 @@ func sleepForFailover() {
 		log.Fatalln("downAfter is no number", *downAfter)
 	}
 	timeToSleep := time.Duration(2*dA) * time.Millisecond
-	log.Println("TimeToSleep to make sure the Master is fallen over for sure", timeToSleep)
+	log.Println("TimeToSleep to make sure the Master has fallen over for sure", timeToSleep)
 	time.Sleep(timeToSleep)
 }

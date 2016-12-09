@@ -1,0 +1,124 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: redis-cluster-one-minions
+  namespace: default
+spec:
+  replicas: 3
+  revisionHistoryLimit: 1
+  minReadySeconds: 30
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: "redis"
+        clustered: "true"
+        role: "minion"
+        redisClusterName: "cluster-one"
+      annotations:
+        redis.instance.port: "6379"
+        redis.sentinel.service.host.name: "redis-sentinel"
+        redis.sentinel.service.port.name: "sentinel-port"
+        redis.sentinel.cluster.name: "cluster-one"
+        redis.sentinel.cluster.quorum: "2"
+        redis.sentinel.cluster.down.after.ms: "5000"
+        redis.sentinel.cluster.parallel.syncs: "1"
+        redis.sentinel.cluster.failover.timeout: "180000"
+        pod.beta.kubernetes.io/init-containers: '[
+          {
+              "name": "copy-config",
+              "image": "busybox",
+              "command": ["cp", "/tmp/slave/slave.conf", "/etc/redis/slave/"],
+              "volumeMounts": [
+                  {
+                      "name": "workdir",
+                      "mountPath": "/etc/redis/slave"
+                  },
+                  {
+                      "name": "slave-conf",
+                      "mountPath": "/tmp/slave"
+                  }
+              ]
+          },
+          {
+              "name": "cluster-setup",
+              "image": "<image of k8s-redis-cluster-init>",
+              "env": [
+                  {
+                  "name": "MY_POD_IP",
+                  "valueFrom": {
+                      "fieldRef": {
+                          "fieldPath": "status.podIP"
+                      }
+                    }
+                  },
+                  {
+                  "name": "NAMESPACE",
+                  "valueFrom": {
+                      "fieldRef": {
+                          "fieldPath": "metadata.namespace"
+                      }
+                    }
+                  },
+                  {
+                  "name": "PORT",
+                  "value": "6379"
+                  },
+                  {
+                  "name": "PATH_TO_CONFIG_VALUE_FILE",
+                  "value": "/tmp/annotations"
+                  },
+                  {
+                  "name": "SYNC_HELPER_HOST_PORT",
+                  "value": "<host:port of helper redis>"
+                  },
+                  {
+                  "name": "PATH_TO_CONFIG_FILE",
+                  "value": "/etc/redis/slave/slave.conf"
+                  }
+              ],
+              "volumeMounts": [
+                  {
+                      "name": "workdir",
+                      "mountPath": "/etc/redis/slave"
+                  },
+                  {
+                      "name": "podinfo",
+                      "mountPath": "/tmp"
+                  }
+              ]
+          }
+        ]'
+
+    spec:
+      volumes:
+      - name: workdir
+        emptyDir: {}
+      - name: slave-conf
+        configMap:
+          name: redis-slave-conf-cmap
+      - name: podinfo
+        downwardAPI:
+          items:
+            - path: "annotations"
+              fieldRef:
+                fieldPath: metadata.annotations
+      containers:
+      - name: redis
+        image: redis:3.2.5-alpine
+        volumeMounts:
+        - name: workdir
+          mountPath: /etc/redis/slave
+        - name: podinfo
+          mountPath: /tmp
+        args:
+          - "$(PATH_TO_CONFIG_FILE)"
+        env:
+        - name: PATH_TO_CONFIG_FILE
+          value: "/etc/redis/slave/slave.conf"
+        ports:
+        - containerPort: 6379
+          protocol: TCP

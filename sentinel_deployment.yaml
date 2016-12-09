@@ -1,0 +1,100 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: redis-sentinel
+  namespace: default
+spec:
+  replicas: 3
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        app: "redis-sentinel"
+        clustered: "true"
+        role: "sentinel"
+      annotations:
+        pod.beta.kubernetes.io/init-containers: '[
+            {
+                "name": "download-assets",
+                "image": "busybox",
+                "command": ["cp", "/tmp/sentinel/sentinel.conf", "/etc/redis/sentinel/"],
+                "volumeMounts": [
+                    {
+                        "name": "sentinel-conf",
+                        "mountPath": "/etc/redis/sentinel"
+                    },
+                    {
+                        "name": "tmp-config",
+                        "mountPath": "/tmp/sentinel"
+                    }
+                ]
+            },
+            {
+                "name": "get-config",
+                "image": "<image of k8s-redis-sentinel-init>",
+                "volumeMounts": [
+                    {
+                        "name": "sentinel-conf",
+                        "mountPath": "/etc/redis/sentinel"
+                    }
+                ],
+                "env": [
+                    {
+                    "name": "SENTINEL_HOST_PORT",
+                    "value": "host:port of sentinel service"
+                    },
+                    {
+                    "name": "PATH_TO_CONFIG_FILE",
+                    "value": "/etc/redis/sentinel/sentinel.conf"
+                    },
+                    {
+                    "name": "MINION_LABELS",
+                    "value": "app=redis,clustered=true,role=minion"
+                    },
+                    {
+                    "name": "NAMESPACE",
+                    "valueFrom": {
+                        "fieldRef": {
+                            "fieldPath": "metadata.namespace"
+                        }
+                      }
+                    }
+                ]
+            }
+        ]'
+    spec:
+      volumes:
+      - name: sentinel-conf
+        emptyDir: {}
+      - name: tmp-config
+        configMap:
+          name: redis-sentinel-conf-cmap
+      containers:
+      - name: redis-sentinel
+        image: redis:3.2.5-alpine
+        command:
+          - "redis-server"
+        args:
+          - "/etc/redis/sentinel/sentinel.conf"
+          - "--sentinel"
+        ports:
+        - name: sentinel-port
+          containerPort: 26379
+          protocol: TCP
+        volumeMounts:
+        - name: sentinel-conf
+          mountPath: /etc/redis/sentinel
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: redis-sentinel
+  namespace: default
+spec:
+  selector:
+    app: "redis-sentinel"
+    clustered: "true"
+    role: "sentinel"
+  ports:
+  - name: sentinel-port
+    port: 26379
